@@ -1,34 +1,33 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 
 const app = express();
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+const PORT = process.env.PORT || 3000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+app.get('/', (req, res) => {
+    res.send("Invoice Backend Running");
+});
+
 app.post('/api/extract', async (req, res) => {
     try {
+
         const { base64Image } = req.body;
 
         if (!base64Image) {
-            return res.status(400).json({ error: 'No image provided' });
+            return res.status(400).json({ error: "No image provided" });
         }
 
-        const prompt = `Strict Grid-Lock Extraction:
-        Extract Vendor Name, Invoice Date,
-        and items with: upc, description, sku, netCost, unitsPerCase, qtyOrdered.
-        Return ONLY JSON.`;
+        if (!GEMINI_API_KEY) {
+            return res.status(500).json({ error: "Missing GEMINI_API_KEY" });
+        }
 
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: text: `
+        const promptText = `
 You are an invoice data extraction engine.
 
 Extract ONLY structured JSON.
@@ -51,45 +50,68 @@ Return JSON in this exact format:
 }
 
 IMPORTANT RULES:
-- netCost must be the CASE cost
-- unitsPerCase must be the number of units inside one case
+- netCost must be the CASE cost (not unit cost)
+- unitsPerCase must be number of units inside one case
 - qtyOrdered must be number of cases ordered
-- If data not found, estimate carefully from context
+- If unsure, estimate logically from invoice
 - Return ONLY JSON
-- No explanation
-`
- },
-                            {
-                                inline_data: {
-                                    mime_type: "image/jpeg",
-                                    data: base64Image.split(',')[1]
+`;
+
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [
+                                { text: promptText },
+                                {
+                                    inline_data: {
+                                        mime_type: "image/jpeg",
+                                        data: base64Image.split(',')[1]
+                                    }
                                 }
-                            }
-                        ]
-                    }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: 0.1
-                    }
+                            ]
+                        }
+                    ]
                 })
             }
         );
 
         const data = await response.json();
 
-        const parsed = JSON.parse(
-            data.candidates[0].content.parts[0].text
-        );
+        if (!data.candidates || !data.candidates[0]) {
+            return res.status(500).json({ error: "Invalid Gemini response" });
+        }
+
+        const textOutput = data.candidates[0].content.parts[0].text;
+
+        // Clean possible markdown formatting
+        const cleaned = textOutput
+            .replace(/```json/g, '')
+            .replace(/```/g, '')
+            .trim();
+
+        let parsed;
+
+        try {
+            parsed = JSON.parse(cleaned);
+        } catch (err) {
+            console.error("JSON parse failed:", cleaned);
+            return res.status(500).json({ error: "Failed to parse Gemini JSON" });
+        }
 
         res.json(parsed);
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Processing failed' });
+    } catch (error) {
+        console.error("Server error:", error);
+        res.status(500).json({ error: "Server crashed" });
     }
 });
-
-const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
