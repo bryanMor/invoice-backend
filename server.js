@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-
+const fetch = require('node-fetch');
 
 const app = express();
 app.use(cors());
@@ -28,7 +28,37 @@ app.post('/api/extract', async (req, res) => {
                 body: JSON.stringify({
                     contents: [{
                         parts: [
-                            { text: prompt },
+                            { text: text: `
+You are an invoice data extraction engine.
+
+Extract ONLY structured JSON.
+
+Return JSON in this exact format:
+
+{
+  "vendorName": "string",
+  "invoiceDate": "YYYY-MM-DD",
+  "items": [
+    {
+      "upc": "string",
+      "description": "string",
+      "sku": "string",
+      "netCost": number,
+      "unitsPerCase": number,
+      "qtyOrdered": number
+    }
+  ]
+}
+
+IMPORTANT RULES:
+- netCost must be the CASE cost
+- unitsPerCase must be the number of units inside one case
+- qtyOrdered must be number of cases ordered
+- If data not found, estimate carefully from context
+- Return ONLY JSON
+- No explanation
+`
+ },
                             {
                                 inline_data: {
                                     mime_type: "image/jpeg",
