@@ -84,6 +84,8 @@ IMPORTANT RULES:
 
         const data = await response.json();
 
+	console.log("Gemini raw response:", JSON.stringify(data));
+
         if (!data.candidates || !data.candidates[0]) {
             return res.status(500).json({ error: "Invalid Gemini response" });
         }
