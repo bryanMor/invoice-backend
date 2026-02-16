@@ -31,35 +31,34 @@ function extractQtyOrdered(rawLine) {
 ================================= */
 
 function calculateUnitsPerCase(description, rawLine) {
-    if (!description) return 1;
 
-    const desc = description.toUpperCase();
+    if (!rawLine) return 1;
 
-    // Handle 2/15 format
+    const desc = description ? description.toUpperCase() : "";
+
+    const csMatch = rawLine.match(/CS(\d{6})/);
+    const csValue = csMatch ? parseInt(csMatch[1]) : 1;
+
+    // 1️⃣ X/Y format
     const slashMatch = desc.match(/(\d+)\s*\/\s*(\d+)/);
     if (slashMatch) {
         return parseInt(slashMatch[1]);
     }
 
-    const masterCaseSize = extractMasterCase(rawLine);
-
-    // Handle PK format
-    const pkMatch = desc.match(/(\d+)\s*PK/);
-
-    if (pkMatch && masterCaseSize) {
-        const packSize = parseInt(pkMatch[1]);
-
-        if (packSize > 0 && masterCaseSize >= packSize) {
-            const derived = masterCaseSize / packSize;
-
-            if (Number.isInteger(derived) && derived > 1) {
-                return derived;
-            }
-        }
+    // 2️⃣ 6PK hierarchy rule
+    if (desc.includes("6PK") && csValue === 1) {
+        return 4;
     }
 
-    return 1;
+    // 3️⃣ 12PK hierarchy rule (rare but possible)
+    if (desc.includes("12PK") && csValue === 1) {
+        return 2;
+    }
+
+    // 4️⃣ Otherwise use CS value directly
+    return csValue || 1;
 }
+
 
 function validateUnitsPerCase(units) {
     if (!units) return false;
