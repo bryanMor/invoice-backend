@@ -35,7 +35,7 @@ function calculateUnitsPerCase(description, rawLine) {
 
     const desc = description.toUpperCase();
 
-    // 1️⃣ Handle 2/15 PACK format
+    // Handle 2/15 format
     const slashMatch = desc.match(/(\d+)\s*\/\s*(\d+)/);
     if (slashMatch) {
         return parseInt(slashMatch[1]);
@@ -43,7 +43,7 @@ function calculateUnitsPerCase(description, rawLine) {
 
     const masterCaseSize = extractMasterCase(rawLine);
 
-    // 2️⃣ Handle 6PK / 12PK / 24PK
+    // Handle PK format
     const pkMatch = desc.match(/(\d+)\s*PK/);
 
     if (pkMatch && masterCaseSize) {
@@ -58,13 +58,8 @@ function calculateUnitsPerCase(description, rawLine) {
         }
     }
 
-    // 3️⃣ Default (single-level case)
     return 1;
 }
-
-/* ===============================
-   SAFETY VALIDATION
-================================= */
 
 function validateUnitsPerCase(units) {
     if (!units) return false;
@@ -80,40 +75,36 @@ app.get('/', (req, res) => {
 app.post('/api/extract', async (req, res) => {
     try {
 
-        const { base64Image } = req.body;
+        const base64Image = req.body.base64Image;
 
         if (!base64Image) {
             return res.status(400).json({ error: "No image provided" });
         }
 
-        const promptText = `
-Extract invoice data as strict JSON.
-
-Return this exact format:
-
-{
-  "vendorName": "string",
-  "invoiceDate": "YYYY-MM-DD",
-  "items": [
-    {
-      "upc": "string",
-      "description": "string",
-      "sku": "string",
-      "netCost": number,
-      "rawLine": "entire raw invoice row as text"
-    }
-  ]
-}
-
-IMPORTANT:
-- netCost is CASE cost.
-- Include the FULL RAW LINE text exactly as seen.
-- Do NOT calculate pack.
-- Return ONLY JSON.
-`;
+        const promptText =
+            "Extract invoice data as strict JSON.\n\n" +
+            "Return this exact format:\n\n" +
+            "{\n" +
+            '  "vendorName": "string",\n' +
+            '  "invoiceDate": "YYYY-MM-DD",\n' +
+            '  "items": [\n' +
+            '    {\n' +
+            '      "upc": "string",\n' +
+            '      "description": "string",\n' +
+            '      "sku": "string",\n' +
+            '      "netCost": number,\n' +
+            '      "rawLine": "full raw invoice line"\n' +
+            '    }\n' +
+            '  ]\n' +
+            "}\n\n" +
+            "IMPORTANT:\n" +
+            "- netCost is CASE cost.\n" +
+            "- Include FULL raw invoice row.\n" +
+            "- Do NOT calculate unitsPerCase.\n" +
+            "- Return ONLY JSON.";
 
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + GEMINI_API_KEY,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -157,11 +148,7 @@ IMPORTANT:
             return res.status(500).json({ error: "Failed to parse Gemini JSON" });
         }
 
-        /* ===============================
-           FINAL PROCESSING LAYER
-        ================================= */
-
-        parsed.items = parsed.items.map(item => {
+        parsed.items = parsed.items.map(function (item) {
 
             const masterCaseSize = extractMasterCase(item.rawLine);
             const qtyFromRaw = extractQtyOrdered(item.rawLine);
@@ -175,9 +162,8 @@ IMPORTANT:
                 finalUnits = 1;
             }
 
-            const qtyOrdered = qtyFromRaw || item.qtyOrdered || 1;
+            const qtyOrdered = qtyFromRaw || 1;
 
-            // Margin sanity check
             const caseCost = parseFloat(item.netCost || 0);
             const unitCost = finalUnits > 0 ? caseCost / finalUnits : 0;
             const retailEstimate = unitCost * 1.35;
@@ -186,10 +172,14 @@ IMPORTANT:
                 : 0;
 
             return {
-                ...item,
-                masterCaseSize,
+                upc: item.upc,
+                description: item.description,
+                sku: item.sku,
+                netCost: item.netCost,
+                rawLine: item.rawLine,
+                masterCaseSize: masterCaseSize,
                 unitsPerCase: finalUnits,
-                qtyOrdered,
+                qtyOrdered: qtyOrdered,
                 marginWarning: (margin < 10 || margin > 80)
             };
         });
@@ -202,4 +192,6 @@ IMPORTANT:
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, function () {
+    console.log("Server running on port " + PORT);
+});
