@@ -147,6 +147,8 @@ app.post('/api/extract', async (req, res) => {
             return res.status(500).json({ error: "Failed to parse Gemini JSON" });
         }
 
+	let grandTotal = 0;
+
         parsed.items = parsed.items.map(function (item) {
 
             const masterCaseSize = extractMasterCase(item.rawLine);
@@ -164,6 +166,8 @@ app.post('/api/extract', async (req, res) => {
             const qtyOrdered = qtyFromRaw || 1;
 
             const caseCost = parseFloat(item.netCost || 0);
+	    const lineTotal = caseCost * qtyOrdered;
+	    grandTotal += lineTotal;
             const unitCost = finalUnits > 0 ? caseCost / finalUnits : 0;
             const retailEstimate = unitCost * 1.35;
             const margin = retailEstimate > 0
@@ -179,9 +183,12 @@ app.post('/api/extract', async (req, res) => {
                 masterCaseSize: masterCaseSize,
                 unitsPerCase: finalUnits,
                 qtyOrdered: qtyOrdered,
+		lineTotal: parseFloat(lineTotal.toFixed(2)),
                 marginWarning: (margin < 10 || margin > 80)
             };
         });
+
+	parsed.grandTotal = parseFloat(grandTotal.toFixed(2));
 
         res.json(parsed);
 
