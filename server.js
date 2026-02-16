@@ -91,6 +91,7 @@ app.post('/api/extract', async (req, res) => {
             '      "upc": "string",\n' +
             '      "description": "string",\n' +
             '      "sku": "string",\n' +
+	    '      "qtyOrdered": number,\n' +
             '      "netCost": number,\n' +
             '      "rawLine": "full raw invoice line"\n' +
             '    }\n' +
@@ -152,7 +153,7 @@ app.post('/api/extract', async (req, res) => {
         parsed.items = parsed.items.map(function (item) {
 
             const masterCaseSize = extractMasterCase(item.rawLine);
-            const qtyFromRaw = extractQtyOrdered(item.rawLine);
+            
 
             let finalUnits = calculateUnitsPerCase(
                 item.description,
@@ -163,7 +164,7 @@ app.post('/api/extract', async (req, res) => {
                 finalUnits = 1;
             }
 
-            const qtyOrdered = qtyFromRaw || 1;
+            const qtyOrdered = parseInt(item.qtyOrdered || 1);
 
             const caseCost = parseFloat(item.netCost || 0);
 	    const lineTotal = caseCost * qtyOrdered;
