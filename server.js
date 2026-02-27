@@ -255,7 +255,7 @@ vendorRules.BONBRIGHTDISTR = {
    GEMINI CALL
 ================================= */
 
-async function callGeminiForInvoice({ base64Image, promptText }) {
+async function callGeminiForInvoice({ base64, mimeType, promptText }) {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -268,11 +268,9 @@ async function callGeminiForInvoice({ base64Image, promptText }) {
           parts: [
             { text: promptText },
             {
-              // Keep this format consistent with what works in your app.
-              // (If your current working code uses inline_data, change here too.)
               inlineData: {
-                mimeType,    // "image/jpeg", "image/png", or "application/pdf"
-                data: base64 // just the base64 part, no "data:...;base64,"
+                mimeType: mimeType || "image/jpeg",
+                data: base64
               }
             }
           ]
