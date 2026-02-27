@@ -26,17 +26,36 @@
  * - Model is set to gemini-2.5-flash by default (change below if needed).
  */
 
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = ["https://bryanmor.github.io"];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+  })
+);
+
 app.use(express.json({ limit: "10mb" }));
 
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  console.error("Missing GEMINI_API_KEY (set it in .env locally or Render env vars)");
+}
 
 // Use the model you confirmed works.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -120,6 +139,15 @@ function extractMasterCase(rawLine) {
   if (!rawLine) return null;
   const match = String(rawLine).match(/CS(\d{6})/);
   return match ? parseInt(match[1], 10) : null;
+}
+
+function parseBase64DataUrl(dataUrl) {
+  const [prefix, base64] = String(dataUrl || "").split(",");
+  const match = prefix.match(/^data:(.+);base64$/);
+  return {
+    mimeType: match ? match[1].trim() : "image/jpeg",
+    base64: base64 || ""
+  };
 }
 
 /**
@@ -243,8 +271,8 @@ async function callGeminiForInvoice({ base64Image, promptText }) {
               // Keep this format consistent with what works in your app.
               // (If your current working code uses inline_data, change here too.)
               inlineData: {
-                mimeType: "image/jpeg",
-                data: base64Image.split(",")[1]
+                mimeType,    // "image/jpeg", "image/png", or "application/pdf"
+                data: base64 // just the base64 part, no "data:...;base64,"
               }
             }
           ]
@@ -433,9 +461,14 @@ app.post("/api/extract", async (req, res) => {
       return res.status(400).json({ error: "No image provided" });
     }
 
+    const { mimeType, base64 } = parseBase64DataUrl(base64Image);
+    if (!base64) {
+      return res.status(400).json({ error: "Invalid image or PDF data" });
+    }
+
     // Pass A: initial extraction
     const initialPrompt = buildInitialPrompt();
-    const rawA = await callGeminiForInvoice({ base64Image, promptText: initialPrompt });
+    const rawA = await callGeminiForInvoice({ base64, mimeType, promptText: initialPrompt });
     let parsedA = normalizeParsed(rawA);
 
     // Compute match vs printed total
@@ -468,7 +501,8 @@ app.post("/api/extract", async (req, res) => {
       });
 
       const rawB = await callGeminiForInvoice({
-        base64Image,
+        base64,
+        mimeType,
         promptText: correctionPrompt
       });
 
