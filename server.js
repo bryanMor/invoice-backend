@@ -36,9 +36,7 @@ const app = express();
 
 const allowedOrigins = ["https://bryanmor.github.io"];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
+app.use(cors({origin: function (origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -50,7 +48,7 @@ app.use(
 
 app.use(express.json({ limit: "10mb" }));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 if (!GEMINI_API_KEY) {
@@ -441,7 +439,7 @@ app.get("/", (req, res) => {
   res.send("Invoice Backend Running");
 });
 
-app.post("/api/extract", async (req, res) => {
+app.post('/api/process-invoice', async (req, res) => {
   try {
     const base64Image = req.body.base64Image;
 
