@@ -238,11 +238,6 @@ const vendorRules = {
     }
   },
 
-  // Example override (optional). Add more vendor keys like this as needed.
-  BONBRIGHTDISTR: {
-    // Inherit beverage base and override only differences.
-    ...null
-  }
 };
 
 // Fix the BONBRIGHTDISTR inheritance cleanly (avoid spreading null above)
