@@ -288,7 +288,14 @@ async function callGeminiForInvoice({ base64, mimeType, promptText }) {
 ================================= */
 
 function normalizeParsed(rawParsed) {
+  // ✅ If Gemini returns just an array of line items, wrap it
+  if (Array.isArray(rawParsed)) {
+    rawParsed = { items: rawParsed };
+  }
+
   const parsed = rawParsed && typeof rawParsed === "object" ? rawParsed : {};
+  ...
+}
 
   parsed.vendorName = parsed.vendorName || "";
   parsed.vendorKey = normalizeVendorKey(parsed.vendorName);
