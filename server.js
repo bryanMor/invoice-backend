@@ -47,6 +47,7 @@ app.use(cors({origin: function (origin, callback) {
 );
 
 app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({limit: '10mb',extended:true}));
 
 const PORT = process.env.PORT || 10000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
