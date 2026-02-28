@@ -23,7 +23,7 @@
  *
  * Notes:
  * - Ensure GEMINI_API_KEY is set in Render env vars.
- * - Model is set to gemini-2.5-flash by default (change below if needed).
+ * - Model is set to gemini-2.0-flash by default (change below if needed).
  */
 
 require("dotenv").config();
@@ -58,7 +58,7 @@ if (!GEMINI_API_KEY) {
 }
 
 // Use the model you confirmed works.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
 /* ===============================
    SAFE PARSING + NORMALIZATION HELPERS
@@ -66,9 +66,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 function parseGeminiJSON(geminiData) {
   const rawText =
-    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    "";
+    geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
   if (!rawText) throw new Error("Gemini returned empty text");
 
@@ -294,12 +292,12 @@ function normalizeParsed(rawParsed) {
   }
 
   const parsed = rawParsed && typeof rawParsed === "object" ? rawParsed : {};
-  ...
-}
 
+  // Initialize top-level fields to prevent "undefined" errors in the route
   parsed.vendorName = parsed.vendorName || "";
   parsed.vendorKey = normalizeVendorKey(parsed.vendorName);
   parsed.invoiceDate = parsed.invoiceDate || null;
+  parsed.warnings = []; // Initialize main warnings array
 
   // Printed invoice total (may be null if missing)
   parsed.invoiceTotal =
@@ -310,10 +308,7 @@ function normalizeParsed(rawParsed) {
   // Items array safety
   parsed.items = Array.isArray(parsed.items) ? parsed.items : [];
 
-  // Pick rules:
-  // - if vendor specific exists -> use it
-  // - else use BEVERAGE_BASE (optional default for your domain)
-  // - else DEFAULT
+  // Pick rules based on vendor
   const rules =
     vendorRules[parsed.vendorKey] ||
     vendorRules.BEVERAGE_BASE ||
@@ -325,21 +320,19 @@ function normalizeParsed(rawParsed) {
     const it = item && typeof item === "object" ? item : {};
 
     const masterCaseSize = extractMasterCase(it.rawLine);
-
     const upc = rules.normalizeUPC(it);
     const sku = rules.normalizeSKU(it);
 
-    // units per case (sub-cases per master, for your EDI logic)
+    // units per case (sub-cases per master, for EDI logic)
     let unitsPerCase = rules.normalizeUnitsPerCase(it);
     if (!validateUnitsPerCase(unitsPerCase)) unitsPerCase = 1;
 
-    // qty ordered (cases). Preserve 0. Default missing/invalid to 0.
+    // qty ordered (cases). Preserve 0.
     let qtyOrdered = rules.normalizeQty(it);
+    const netCost = rules.normalizeNetCost(it); 
+    const lineAmount = rules.normalizeLineAmount(it); 
 
-    const netCost = rules.normalizeNetCost(it); // net CASE cost
-    const lineAmount = rules.normalizeLineAmount(it); // optional extended amount from invoice
-
-    // Try to auto-correct qty when amount supports it
+    // Try to auto-correct qty using mathematical validation
     const correctedQty = correctQtyUsingAmount({
       qtyOrdered,
       netCost,
@@ -352,24 +345,19 @@ function normalizeParsed(rawParsed) {
     const lineTotal = netCost * qtyOrdered;
     computedGrandTotal += lineTotal;
 
-    // Optional margin warning (kept from earlier work)
+    // --- MARGIN CALCULATION FIX ---
     const unitCost = unitsPerCase > 0 ? netCost / unitsPerCase : 0;
-    const retailEstimate = unitCost * 1.35;
-    const margin =
-      retailEstimate > 0 ? ((retailEstimate - unitCost) / retailEstimate) * 100 : 0;
+    const retailEstimate = unitCost * 1.35; // Assuming 35% standard markup
+    const margin = retailEstimate > 0 ? ((retailEstimate - unitCost) / retailEstimate) * 100 : 0;
+    // ------------------------------
 
-    const warnings = [];
-    if (!upc || upc.length < 11) warnings.push("UPC_MISSING_OR_SHORT");
-    if (qtyOrdered === 0) warnings.push("QTY_ZERO");
-    if (qtyCorrected) warnings.push("QTY_CORRECTED_FROM_AMOUNT");
-    if (netCost <= 0) warnings.push("NETCOST_MISSING_OR_ZERO");
-    if (Number.isNaN(lineAmount)) {
-      // we store null below; no warning needed unless you want:
-      // warnings.push("LINEAMOUNT_MISSING");
-    }
+    const itemWarnings = [];
+    if (!upc || upc.length < 11) itemWarnings.push("UPC_MISSING_OR_SHORT");
+    if (qtyOrdered === 0) itemWarnings.push("QTY_ZERO");
+    if (qtyCorrected) itemWarnings.push("QTY_CORRECTED_FROM_AMOUNT");
+    if (netCost <= 0) itemWarnings.push("NETCOST_MISSING_OR_ZERO");
 
     return {
-      // Keep your current field names to avoid breaking frontend
       upc: it.upc,
       upc11: upc,
       description: it.description || "",
@@ -382,15 +370,15 @@ function normalizeParsed(rawParsed) {
       unitsPerCase,
       qtyOrdered,
       lineTotal: round2(lineTotal),
-      marginWarning: margin < 10 || margin > 80,
-      warnings
+      marginWarning: margin < 10 || margin > 80, // Now "margin" is defined!
+      warnings: itemWarnings
     };
   });
 
   parsed.grandTotal = round2(computedGrandTotal);
 
   return parsed;
-}
+} // ✅ Properly closed function scope
 
 /* ===============================
    PROMPTS
