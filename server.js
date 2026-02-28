@@ -468,6 +468,7 @@ app.post("/api/extract", async (req, res) => {
     const initialPrompt = buildInitialPrompt();
     const rawA = await callGeminiForInvoice({ base64, mimeType, promptText: initialPrompt });
     let parsedA = normalizeParsed(rawA);
+    if (!Array.isArray(parsedA.items)) parsedA.items = [];
 
     // Compute match vs printed total
     const printedTotalA =
@@ -505,6 +506,7 @@ app.post("/api/extract", async (req, res) => {
       });
 
       const parsedB = normalizeParsed(rawB);
+      if (!Array.isArray(parsedB.items)) parsedB.items = [];
 
       const printedTotalB =
         parsedB.invoiceTotal === null ? NaN : safeMoney(parsedB.invoiceTotal, NaN);
@@ -529,7 +531,7 @@ app.post("/api/extract", async (req, res) => {
     }
   } catch (error) {
     console.error("Server error:", error);
-    res.status(500).json({ error: "Server crashed" });
+    return res.status(500).json({ error: "Server crashed" });
   }
 });
 
